@@ -26,7 +26,7 @@ def main():
                      )
     
     img = Image.fromarray(img)
-    img.save("cow_pairx_example.png")
+    img.save("examples/cow_pairx_example.png")
 
 if __name__ == "__main__":
     main()
