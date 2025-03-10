@@ -5,16 +5,16 @@ import matplotlib.pyplot as plt
 import cv2
 import torch.nn.functional as F
 from zennit.composites import EpsilonPlus
-from xai_canonization.quantus_evaluation.canonizers.efficientnet import EfficientNetBNCanonizer
+from xai_canonizers.efficientnet import EfficientNetBNCanonizer
 import torchvision.transforms as transforms
 from zennit.torchvision import ResNetCanonizer
-from custom_canonizers import ResNetCanonizerTimm
+#from custom_canonizers import ResNetCanonizerTimm
 import timm
 import torchvision
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
-from LightGlue.lightglue import LightGlue, SuperPoint
-from LightGlue.lightglue.utils import rbd
+#from LightGlue.lightglue import LightGlue, SuperPoint
+#from LightGlue.lightglue.utils import rbd
 import pickle
 
 
@@ -289,7 +289,8 @@ def explain(device, dataset, annot_0, annot_1, model, layer_keys, k_lines=10,k_c
     img_0 = img_0.unsqueeze(0).to(device)
     img_1 = img_1.unsqueeze(0).to(device)
 
-    H_lightglue = get_lightglue_homography(device, img_0, img_1)
+    #H_lightglue = get_lightglue_homography(device, img_0, img_1)
+    H_lightglue = None
 
     # TODO - change to get untransformed version straight from dataset
     
