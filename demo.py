@@ -14,7 +14,7 @@ def main():
     df = toy_df()
     dataset = XAIDataset(df, img_size, img_transforms)
 
-    _, img = explain(device,
+    img = explain(device,
                      dataset,
                      "cow_0_0",              # first annot
                      "cow_0_1",              # second annot
@@ -22,7 +22,6 @@ def main():
                      ["backbone.blocks.3"],  # intermediate layer to visualize
                      k_lines=20,             # number of matches to visualize as lines
                      k_colors=10,            # number of matches to visualize as colors
-                     return_img=True
                      )
     
     img = Image.fromarray(img)

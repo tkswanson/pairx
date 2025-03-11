@@ -44,7 +44,7 @@ def get_intermediate_feature_maps_and_embedding(img, model, layer_keys):
 
     return intermediate_fms, embedding
 
-def get_feature_matches(feature_map_0, feature_map_1, img_0, img_1, match_img_save_path=None):
+def get_feature_matches(feature_map_0, feature_map_1, img_0, img_1):
     def flatten_to_descriptors(feature_map):
         descriptors = feature_map.squeeze().flatten(start_dim=1).transpose(0,1)
         return descriptors.detach().cpu().numpy()
@@ -71,20 +71,6 @@ def get_feature_matches(feature_map_0, feature_map_1, img_0, img_1, match_img_sa
 
     bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
     matches = bf.match(descriptors_0, descriptors_1)
-
-    if match_img_save_path:
-        print("saving image with matches!")
-        matched_image = cv2.drawMatches(
-            to_displayable_np(img_0),
-            keypoints_0,
-            to_displayable_np(img_1),
-            keypoints_1,
-            matches,
-            None,
-            flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
-
-        cv2.imwrite(match_img_save_path, matched_image)
-        print("saved!")
 
     matches = [{'coord0': idx_to_coord(match.queryIdx, feature_map_0),
                 'coord1': idx_to_coord(match.trainIdx, feature_map_1),
@@ -216,10 +202,6 @@ def draw_color_maps(value_set_0, value_set_1, img_shape):
     if len(value_set_0) == 0:
         return output_img.astype(np.uint8)
     
-    #scale_factor = min(max((4 / len(value_set_0)), 0.2), 1)
-    #gamma = 1 - .02 * len(value_set_0)
-    #gamma = 0.8 if len(value_set_0) <= 12 else 0.3 # TODO - figure out better scaling method - this is kind of model-dependent
-
     scale_factor = .8
     gamma = .95
 
@@ -246,31 +228,7 @@ def draw_matches_and_color_maps(img_0, img_1, matches,
 
     return cv2.vconcat((matches_img, color_map_img))
 
-def get_lightglue_homography(device, img_0, img_1):
-    if 'TORCH_HOME' in os.environ:
-        del os.environ['TORCH_HOME']
-
-    extractor = SuperPoint(max_num_keypoints=2048).eval().to(device)
-    matcher = LightGlue(features="superpoint").eval().to(device)
-    
-    feats_0 = extractor.extract(img_0)
-    feats_1 = extractor.extract(img_1)
-    matches = matcher({"image0": feats_0, "image1": feats_1})
-    
-    feats_0, feats_1, matches = [rbd(x) for x in (feats_0, feats_1, matches)]
-    kpts_0, kpts_1, matches = feats_0["keypoints"], feats_1["keypoints"], matches["matches"]
-
-    m_kpts_0, m_kpts_1 = kpts_0[matches[..., 0]].cpu().numpy(), kpts_1[matches[..., 1]].cpu().numpy()
-
-    try:
-        H_lightglue, mask = cv2.findHomography(m_kpts_0, m_kpts_1, method=0)
-    except:
-        H_lightglue = None
-
-    return H_lightglue
-
 def calculate_residuals(H, src_pts, dst_pts):
-    # TODO - just double check the math here
     src_pts = src_pts.reshape(-1, 2)
     dst_pts = dst_pts.reshape(-1, 2)
     
@@ -282,15 +240,12 @@ def calculate_residuals(H, src_pts, dst_pts):
 
     return np.mean(residuals)
 
-def explain(device, dataset, annot_0, annot_1, model, layer_keys, k_lines=10,k_colors=10, only_evaluate=False, return_img=False, match_img_save_path=None, color_map_save_path=None):
-    img_0, name_0, _ = dataset.get_image_transformed(annot_0)
-    img_1, name_1, _ = dataset.get_image_transformed(annot_1)
+def explain(device, dataset, annot_0, annot_1, model, layer_keys, k_lines=10,k_colors=10):
+    img_0, _, _ = dataset.get_image_transformed(annot_0)
+    img_1, _, _ = dataset.get_image_transformed(annot_1)
 
     img_0 = img_0.unsqueeze(0).to(device)
     img_1 = img_1.unsqueeze(0).to(device)
-
-    #H_lightglue = get_lightglue_homography(device, img_0, img_1)
-    H_lightglue = None
 
     # TODO - change to get untransformed version straight from dataset
     
@@ -298,7 +253,6 @@ def explain(device, dataset, annot_0, annot_1, model, layer_keys, k_lines=10,k_c
     feature_maps_0, emb_0 = get_intermediate_feature_maps_and_embedding(img_0, model, layer_keys)
     feature_maps_1, emb_1 = get_intermediate_feature_maps_and_embedding(img_1, model, layer_keys)
             
-
     # backpropagate cosine similarity back to the intermediate layers
     emb_0.retain_grad()
     emb_1.retain_grad()
@@ -309,11 +263,6 @@ def explain(device, dataset, annot_0, annot_1, model, layer_keys, k_lines=10,k_c
     intermediate_relevances_0 = get_intermediate_relevances(img_0, emb_0.grad, model, layer_keys)
     intermediate_relevances_1 = get_intermediate_relevances(img_1, emb_1.grad, model, layer_keys)
 
-    results = {'annots': (str(annot_0), str(annot_1)),
-               'cosine_sim': cosine_sim.item(),
-               'is_match': 1 if name_0 == name_1 else 0,
-               'scores': {}}
-
     for layer_key in layer_keys:
         feature_map_0 = feature_maps_0[layer_key]
         feature_map_1 = feature_maps_1[layer_key]
@@ -321,7 +270,7 @@ def explain(device, dataset, annot_0, annot_1, model, layer_keys, k_lines=10,k_c
         intermediate_relevance_1 = intermediate_relevances_1[layer_key]
         
         # get a set of feature matches
-        matches = get_feature_matches(feature_map_0, feature_map_1, img_0, img_1, match_img_save_path)
+        matches = get_feature_matches(feature_map_0, feature_map_1, img_0, img_1)
 
         matched_relevance = 0
     
@@ -334,82 +283,19 @@ def explain(device, dataset, annot_0, annot_1, model, layer_keys, k_lines=10,k_c
             match['relevance'] = intermediate_relevance_0[j0][i0] * intermediate_relevance_1[j1][i1]
 
         matches.sort(key = lambda x: -x['relevance'])
-
-        # score based on proportion of relevance matched
-        total_relevance = intermediate_relevance_0.sum() + intermediate_relevance_1.sum()
-        match_relevance_score = matched_relevance / total_relevance
-        proportion_matched = len(matches) / (feature_map_0.shape[-1] * feature_map_1.shape[-2])
-
-        # scores based on how well points follow a homography
-        # TODO - clean this up
-        all_pts_0 = np.array([match['keypoint0'].pt for match in matches])
-        all_pts_1 = np.array([match['keypoint1'].pt for match in matches])
-
-        top_count = int(feature_map_0.shape[-1] * feature_map_1.shape[-2] * 0.05)
-        top_pts_0 = np.array([match['keypoint0'].pt for match in matches[:top_count]])
-        top_pts_1 = np.array([match['keypoint1'].pt for match in matches[:top_count]])
-
-        try:
-            H_all_deep_features, _ = cv2.findHomography(all_pts_0, all_pts_1, method=0)
-            residual_mean_deep_features_all = calculate_residuals(H_all_deep_features, all_pts_0, all_pts_1)
-        except:
-            residual_mean_deep_features_all = None
-
-        try:
-            H_top_deep_features, _ = cv2.findHomography(top_pts_0, top_pts_1, method=0)
-            residual_mean_deep_features_top = calculate_residuals(H_top_deep_features, top_pts_0, top_pts_1)
-        except:
-            residual_mean_deep_features_top = None
-
-        if H_lightglue is not None:
-            residual_mean_lightglue_all = calculate_residuals(H_lightglue, all_pts_0, all_pts_1)
-            residual_mean_lightglue_top = calculate_residuals(H_lightglue, top_pts_0, top_pts_1)
-
-        else:
-            residual_mean_lightglue_all = None
-            residual_mean_lightglue_top = None
-
-        result_dict = {'proportion_relevance_matched': match_relevance_score,
-                        'proportion_matched': proportion_matched,
-                        'residual_mean_lightglue_all': residual_mean_lightglue_all,
-                        'residual_mean_lightglue_top': residual_mean_lightglue_top,
-                        'residual_mean_deep_features_all': residual_mean_deep_features_all,
-                        'residual_mean_deep_features_top': residual_mean_deep_features_top}
-        result_dict = {k: float(v) if v else None for k, v in result_dict.items()}
-
-        results['scores'][layer_key] = result_dict
         
-        if not only_evaluate:
-            # for each selected feature match, backpropagate to the original image
-            pixel_relevances_0 = []
-            pixel_relevances_1 = []
-            for match in matches[:k_colors]:
-                pixel_relevances_0.append(get_pixel_relevance(device, img_0, match['coord0'], model, layer_key))
-                pixel_relevances_1.append(get_pixel_relevance(device, img_1, match['coord1'], model, layer_key))
+        # for each selected feature match, backpropagate to the original image
+        pixel_relevances_0 = []
+        pixel_relevances_1 = []
+        for match in matches[:k_colors]:
+            pixel_relevances_0.append(get_pixel_relevance(device, img_0, match['coord0'], model, layer_key))
+            pixel_relevances_1.append(get_pixel_relevance(device, img_1, match['coord1'], model, layer_key))    
 
-            if color_map_save_path:
-                np.save(f'{color_map_save_path}_1.npy', np.array(pixel_relevances_0, dtype=object), allow_pickle=True)
-                np.save(f'{color_map_save_path}_2.npy', np.array(pixel_relevances_1, dtype=object), allow_pickle=True)
-                
+        # build visualized outputs
+        output_img = draw_matches_and_color_maps(img_0, img_1, matches[:k_lines],
+                                    intermediate_relevance_0, intermediate_relevance_1,
+                                    pixel_relevances_0, pixel_relevances_1)
 
-            # build visualized outputs
-            output_img = draw_matches_and_color_maps(img_0, img_1, matches[:k_lines],
-                                        intermediate_relevance_0, intermediate_relevance_1,
-                                        pixel_relevances_0, pixel_relevances_1)
-
-            if not return_img:
-                print(f'Layer: {layer_key}')
-            
-                plt.figure(figsize=(50,50))
-                plt.imshow(output_img)
-                plt.axis('off')
-                plt.show()
-
-    if return_img:
-        assert not only_evaluate, "can't return image if set to only evaluate"
-        assert len(layer_keys) == 1, "can't return an output image with >1 layer key provided"
-        return results, output_img
-
-    return results
+    return output_img
 
     
