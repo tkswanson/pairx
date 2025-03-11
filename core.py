@@ -269,27 +269,18 @@ def pairx(device, img_0, img_1, model, layer_keys, k_lines, k_colors):
         
     return results
 
-def explain(device, dataset, annot_0, annot_1, model, layer_keys, k_lines=10,k_colors=10):
-    img_0, _, _ = dataset.get_image_transformed(annot_0)
-    img_1, _, _ = dataset.get_image_transformed(annot_1)
-
-    img_0 = img_0.unsqueeze(0).to(device)
-    img_1 = img_1.unsqueeze(0).to(device)
-
-    img_0_np, _, _ = dataset.get_image_pretransform(annot_0)
-    img_1_np, _, _ = dataset.get_image_pretransform(annot_1)
-    
-    # get intermediate feature maps + embeddings
+def explain(device, img_0, img_1, img_np_0, img_np_1, model, layer_keys, k_lines=10, k_colors=10):
+    # get pairx results
     pairx_results = pairx(device, img_0, img_1, model, layer_keys, k_lines, k_colors)
 
+    # visualize the results into images
     output_images = []
     for layer_key in layer_keys:
         matches = pairx_results[layer_key]["matches"]
         intermediate_relevance_0, intermediate_relevance_1 = pairx_results[layer_key]["intermediate_relevances"]
         pixel_relevances_0, pixel_relevances_1 = pairx_results[layer_key]["pixel_relevances"]
 
-        # build visualized outputs
-        output_images.append(draw_matches_and_color_maps(img_0_np, img_1_np, matches[:k_lines],
+        output_images.append(draw_matches_and_color_maps(img_np_0, img_np_1, matches[:k_lines],
                                     intermediate_relevance_0, intermediate_relevance_1,
                                     pixel_relevances_0, pixel_relevances_1))
 

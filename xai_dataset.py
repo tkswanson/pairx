@@ -71,3 +71,33 @@ class XAIDataset:
 
     def save_df(self, output_dir):
         self.df.to_csv(os.path.join(output_dir, 'df.csv'), index=False)
+    
+    def get_img_pair(self, device, annot_0, annot_1):
+        img_0, _, _ = self.get_image_transformed(annot_0)
+        img_1, _, _ = self.get_image_transformed(annot_1)
+
+        img_0 = img_0.unsqueeze(0).to(device)
+        img_1 = img_1.unsqueeze(0).to(device)
+
+        img_np_0, _, _ = self.get_image_pretransform(annot_0)
+        img_np_1, _, _ = self.get_image_pretransform(annot_1)
+
+        return img_0, img_1, img_np_0, img_np_1
+
+def get_img_pair_from_paths(device, img_path_0, img_path_1, img_size, img_transform):
+    def get_img_pair_from_path(img_path, transform):
+        with open(img_path, "rb") as f:
+            img = ImageOps.exif_transpose(Image.open(f))
+            img.load()
+
+            img = transforms.Resize(img_size)(img)
+
+            if transform:
+                return img_transform(img).unsqueeze(0).to(device)
+
+            return np.array(img)
+    
+    return (get_img_pair_from_path(img_path_0, transform=True),
+            get_img_pair_from_path(img_path_1, transform=True),
+            get_img_pair_from_path(img_path_0, transform=False),
+            get_img_pair_from_path(img_path_1, transform=False),)
