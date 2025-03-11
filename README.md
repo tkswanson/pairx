@@ -18,6 +18,20 @@ Demo code for Pairwise mAtching of Intermediate Representations for eXplainabili
 
 ## Quickstart: Running on new datasets and models
 
+### Imports
+
+Clone the repository as described above. Then include the needed imports:
+
+       import torch
+       import os
+       from PIL import Image
+       
+       from xai_dataset import XAIDataset, get_img_pair_from_paths
+       from example_loaders import toy_df, wildme_multispecies_miewid
+       from core import explain
+
+       device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 ### Load the model components
 
 To use [WildMe multispecies MiewID](https://huggingface.co/conservationxlabs/miewid-msv2), you can use:
