@@ -72,7 +72,7 @@ With the model and images loaded, you can run PAIR-X using:
 
 The best intermediate layer to use may vary by model and dataset. To choose one for your problem, we suggest generating visualizations for a few layers and manually selecting one. The `explain` function allows you to supply multiple layer keys, producing a visualization for each.
 
-You can efficiently list all the layer keys in your model using `helpers.list_layer_keys(model)`. In our experiments, we typically compared across each of the higher-level blocks in a model (e.g., for an EfficientNet backbone, we tried `layer_keys = (blocks.1, blocks.2, blocks.3, blocks.4, blocks.5)`).
+You can efficiently list all the layer keys in your model using `helpers.list_layer_keys(model, max_depth=4)`. In our experiments, we typically compared across each of the higher-level blocks in a model (e.g., for an EfficientNet backbone, we tried `layer_keys = (blocks.1, blocks.2, blocks.3, blocks.4, blocks.5)`).
 
 
 
