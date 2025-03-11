@@ -141,22 +141,6 @@ def get_pixel_relevance(device, img, coord, model, layer_key):
 
     return img.grad.squeeze().sum(dim=0).abs().detach().cpu().numpy()
 
-MEAN = [0.485, 0.456, 0.406]
-STD = [0.229, 0.224, 0.225]
-
-def inverse_normalize(image):
-    tfm = transforms.Compose(
-        [
-            transforms.Normalize(mean=[0.0, 0.0, 0.0], std=[1 / x for x in STD]),
-            transforms.Normalize(mean=[-x for x in MEAN], std=[1.0, 1.0, 1.0]),
-        ]
-    )
-
-    return tfm(image)
-
-def to_displayable_np(img):
-    return inverse_normalize(img.to('cpu'))[0].mul(255).add_(0.5).clamp_(0, 255).permute(1, 2, 0).to("cpu", torch.uint8).numpy()
-
 def display_image_with_heatmap(img, heatmap, min = None, max = None):
     if min == None:
         min = np.min(heatmap)
@@ -214,11 +198,11 @@ def draw_color_maps(value_set_0, value_set_1, img_shape):
 
     return (np.clip(1 - output_img, 0, 1) * 255).astype(np.uint8)
 
-def draw_matches_and_color_maps(img_0, img_1, matches,
+def draw_matches_and_color_maps(img_np_0, img_np_1, matches,
                                 intermediate_relevance_0, intermediate_relevance_1,
                                 pixel_relevances_0, pixel_relevances_1):
-    img_np_0 = to_displayable_np(img_0)
-    img_np_1 = to_displayable_np(img_1)
+    #img_np_0 = to_displayable_np(img_0)
+    #img_np_1 = to_displayable_np(img_1)
 
     img_hm_0 = display_image_with_heatmap(img_np_0, intermediate_relevance_0)
     img_hm_1 = display_image_with_heatmap(img_np_1, intermediate_relevance_1)
@@ -240,19 +224,10 @@ def calculate_residuals(H, src_pts, dst_pts):
 
     return np.mean(residuals)
 
-def explain(device, dataset, annot_0, annot_1, model, layer_keys, k_lines=10,k_colors=10):
-    img_0, _, _ = dataset.get_image_transformed(annot_0)
-    img_1, _, _ = dataset.get_image_transformed(annot_1)
-
-    img_0 = img_0.unsqueeze(0).to(device)
-    img_1 = img_1.unsqueeze(0).to(device)
-
-    # TODO - change to get untransformed version straight from dataset
-    
-    # get intermediate feature maps + embeddings
+def pairx(device, img_0, img_1, model, layer_keys, k_lines, k_colors):
     feature_maps_0, emb_0 = get_intermediate_feature_maps_and_embedding(img_0, model, layer_keys)
     feature_maps_1, emb_1 = get_intermediate_feature_maps_and_embedding(img_1, model, layer_keys)
-            
+    
     # backpropagate cosine similarity back to the intermediate layers
     emb_0.retain_grad()
     emb_1.retain_grad()
@@ -263,6 +238,7 @@ def explain(device, dataset, annot_0, annot_1, model, layer_keys, k_lines=10,k_c
     intermediate_relevances_0 = get_intermediate_relevances(img_0, emb_0.grad, model, layer_keys)
     intermediate_relevances_1 = get_intermediate_relevances(img_1, emb_1.grad, model, layer_keys)
 
+    results = {}
     for layer_key in layer_keys:
         feature_map_0 = feature_maps_0[layer_key]
         feature_map_1 = feature_maps_1[layer_key]
@@ -272,30 +248,51 @@ def explain(device, dataset, annot_0, annot_1, model, layer_keys, k_lines=10,k_c
         # get a set of feature matches
         matches = get_feature_matches(feature_map_0, feature_map_1, img_0, img_1)
 
-        matched_relevance = 0
-    
         # go through matches and record each match's calculated relevance
         for match in matches:
             i0, j0 = match['coord0']
             i1, j1 = match['coord1']
-            matched_relevance += intermediate_relevance_0[j0][i0]
-            matched_relevance += intermediate_relevance_1[j1][i1]
             match['relevance'] = intermediate_relevance_0[j0][i0] * intermediate_relevance_1[j1][i1]
 
         matches.sort(key = lambda x: -x['relevance'])
-        
+
         # for each selected feature match, backpropagate to the original image
         pixel_relevances_0 = []
         pixel_relevances_1 = []
         for match in matches[:k_colors]:
             pixel_relevances_0.append(get_pixel_relevance(device, img_0, match['coord0'], model, layer_key))
-            pixel_relevances_1.append(get_pixel_relevance(device, img_1, match['coord1'], model, layer_key))    
+            pixel_relevances_1.append(get_pixel_relevance(device, img_1, match['coord1'], model, layer_key))
+        
+        results[layer_key] = {'intermediate_relevances': (intermediate_relevance_0, intermediate_relevance_1),
+                              'matches': matches[:k_lines],
+                              'pixel_relevances': (pixel_relevances_0, pixel_relevances_1)}
+        
+    return results
+
+def explain(device, dataset, annot_0, annot_1, model, layer_keys, k_lines=10,k_colors=10):
+    img_0, _, _ = dataset.get_image_transformed(annot_0)
+    img_1, _, _ = dataset.get_image_transformed(annot_1)
+
+    img_0 = img_0.unsqueeze(0).to(device)
+    img_1 = img_1.unsqueeze(0).to(device)
+
+    img_0_np, _, _ = dataset.get_image_pretransform(annot_0)
+    img_1_np, _, _ = dataset.get_image_pretransform(annot_1)
+    
+    # get intermediate feature maps + embeddings
+    pairx_results = pairx(device, img_0, img_1, model, layer_keys, k_lines, k_colors)
+
+    output_images = []
+    for layer_key in layer_keys:
+        matches = pairx_results[layer_key]["matches"]
+        intermediate_relevance_0, intermediate_relevance_1 = pairx_results[layer_key]["intermediate_relevances"]
+        pixel_relevances_0, pixel_relevances_1 = pairx_results[layer_key]["pixel_relevances"]
 
         # build visualized outputs
-        output_img = draw_matches_and_color_maps(img_0, img_1, matches[:k_lines],
+        output_images.append(draw_matches_and_color_maps(img_0_np, img_1_np, matches[:k_lines],
                                     intermediate_relevance_0, intermediate_relevance_1,
-                                    pixel_relevances_0, pixel_relevances_1)
+                                    pixel_relevances_0, pixel_relevances_1))
 
-    return output_img
+    return output_images
 
     

@@ -22,7 +22,7 @@ def main():
                      ["backbone.blocks.3"],  # intermediate layer to visualize
                      k_lines=20,             # number of matches to visualize as lines
                      k_colors=10,            # number of matches to visualize as colors
-                     )
+                     )[0]
     
     img = Image.fromarray(img)
     img.save("examples/cow_pairx_example.png")
