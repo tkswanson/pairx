@@ -1,5 +1,6 @@
 import os
 import torch
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
@@ -141,6 +142,31 @@ def get_pixel_relevance(device, img, coord, model, layer_key):
 
     return img.grad.squeeze().sum(dim=0).abs().detach().cpu().numpy()
 
+def get_pixel_relevances(device, img, coords, model, layer_key):
+    composite = EpsilonPlus(canonizers=[choose_canonizer(model)])
+    
+    img.requires_grad = True
+    img.grad = None
+
+    grads = []
+
+    with composite.context(model) as modified_model:
+        # TODO - does this have to have both a forward *and* backward pass every time?
+        intermediate_fms, _ = get_intermediate_feature_maps_and_embedding(img, modified_model, [layer_key])
+        intermediate_fm = intermediate_fms[layer_key]
+
+        for coord in coords:
+            gradient = torch.zeros(intermediate_fm.shape)
+            gradient[:, :, coord[1], coord[0]] = intermediate_fm[:, :, coord[1], coord[0]]
+
+            intermediate_fm.backward(gradient=gradient.to(device), retain_graph=True)
+
+            grads.append(img.grad.squeeze().sum(dim=0).abs().detach().cpu().numpy())
+            img.grad=None
+
+    #return img.grad.squeeze().sum(dim=0).abs().detach().cpu().numpy()
+    return grads
+
 def display_image_with_heatmap(img, heatmap, min = None, max = None):
     if min == None:
         min = np.min(heatmap)
@@ -257,12 +283,9 @@ def pairx(device, img_0, img_1, model, layer_keys, k_lines, k_colors):
         matches.sort(key = lambda x: -x['relevance'])
 
         # for each selected feature match, backpropagate to the original image
-        pixel_relevances_0 = []
-        pixel_relevances_1 = []
-        for match in matches[:k_colors]:
-            pixel_relevances_0.append(get_pixel_relevance(device, img_0, match['coord0'], model, layer_key))
-            pixel_relevances_1.append(get_pixel_relevance(device, img_1, match['coord1'], model, layer_key))
-        
+        pixel_relevances_0 = get_pixel_relevances(device, img_0, [match['coord0'] for match in matches[:k_colors]], model, layer_key)
+        pixel_relevances_1 = get_pixel_relevances(device, img_1, [match['coord1'] for match in matches[:k_colors]], model, layer_key)
+
         results[layer_key] = {'intermediate_relevances': (intermediate_relevance_0, intermediate_relevance_1),
                               'matches': matches[:k_lines],
                               'pixel_relevances': (pixel_relevances_0, pixel_relevances_1)}
