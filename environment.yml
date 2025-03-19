@@ -20,5 +20,4 @@ dependencies:
     - transformers==4.49.0
     - wandb==0.19.7
     - wildlife-datasets==1.0.5
-    - wildlife-tools==1.0.1
     - zennit==0.5.1
