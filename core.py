@@ -1,23 +1,16 @@
-import os
 import torch
-import time
 import numpy as np
-import matplotlib.pyplot as plt
 import cv2
 import torch.nn.functional as F
 from zennit.composites import EpsilonPlus
-from xai_canonizers.efficientnet import EfficientNetBNCanonizer
-import torchvision.transforms as transforms
 from zennit.torchvision import ResNetCanonizer
-#from custom_canonizers import ResNetCanonizerTimm
 import timm
 import torchvision
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
-#from LightGlue.lightglue import LightGlue, SuperPoint
-#from LightGlue.lightglue.utils import rbd
-import pickle
 
+from xai_canonizers.efficientnet import EfficientNetBNCanonizer
+from xai_canonizers.resnet_timm import ResNetCanonizerTimm
 
 COLORS = ['Grey', 'Purple', 'Blue', 'Green', 'Orange', 'Red']
 CMAPS = ['Greys', 'Purples', 'Blues', 'Greens', 'Oranges', 'Reds']
@@ -151,7 +144,6 @@ def get_pixel_relevances(device, img, coords, model, layer_key):
     grads = []
 
     with composite.context(model) as modified_model:
-        # TODO - does this have to have both a forward *and* backward pass every time?
         intermediate_fms, _ = get_intermediate_feature_maps_and_embedding(img, modified_model, [layer_key])
         intermediate_fm = intermediate_fms[layer_key]
 
@@ -293,6 +285,23 @@ def pairx(device, img_0, img_1, model, layer_keys, k_lines, k_colors):
     return results
 
 def explain(img_0, img_1, img_np_0, img_np_1, model, layer_keys, k_lines=20, k_colors=10):
+    """
+    Generates a PAIR-X explanation for the provided images and model.
+
+    Args:
+        img_0 (torch.Tensor): The first input image, with any transforms applied.
+        img_1 (torch.Tensor): The second input image, with any transforms applied.
+        img_np_0 (numpy.ndarray): The first image, resized but not otherwise transformed, as a NumPy array.
+        img_np_1 (numpy.ndarray): The second image, resized but not otherwise transformed, as a NumPy array.
+        model (torch.nn.Module or equivalent): The deep metric learning model.
+        layer_keys (list of str): The keys of the intermediate layers to be used.
+        k_lines (int, optional): The number of matches to visualize as lines. Defaults to 20.
+        k_colors (int, optional): The number of matches to backpropagate to original image pixels. Defaults to 10.
+
+    Returns:
+        list of numpy.ndarray: If `len(layer_keys) > 1`, returns a list of PAIR-X visualizations as NumPy arrays.
+        numpy.ndarray: If `len(layer_keys) == 1`, returns a single PAIR-X visualization as a NumPy array.
+    """
     device = model.device
 
     # get pairx results
@@ -310,6 +319,7 @@ def explain(img_0, img_1, img_np_0, img_np_1, model, layer_keys, k_lines=20, k_c
                                     pixel_relevances_0, pixel_relevances_1))
 
     if len(layer_keys) == 1:
+        print(type(output_images[0]))
         return output_images[0]
     
     return output_images
