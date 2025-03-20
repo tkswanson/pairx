@@ -292,7 +292,8 @@ def pairx(device, img_0, img_1, model, layer_keys, k_lines, k_colors):
         
     return results
 
-def explain(device, img_0, img_1, img_np_0, img_np_1, model, layer_keys, k_lines=10, k_colors=10):
+def explain(img_0, img_1, img_np_0, img_np_1, model, layer_keys, k_lines=10, k_colors=10):
+    device = model.device
     # get pairx results
     pairx_results = pairx(device, img_0, img_1, model, layer_keys, k_lines, k_colors)
 
