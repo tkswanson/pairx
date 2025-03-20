@@ -77,7 +77,6 @@ def get_feature_matches(feature_map_0, feature_map_1, img_0, img_1):
 def choose_canonizer(model):
     if type(model) is torchvision.models.resnet.ResNet:
         canonizer = ResNetCanonizer()
-        #canonizer = EfficientNetBNCanonizer()
     elif (type(model) is timm.models.efficientnet.EfficientNet
           or (hasattr(model, 'backbone')
               and type(model.backbone) is timm.models.efficientnet.EfficientNet)):
@@ -117,24 +116,6 @@ def get_intermediate_relevances(img, gradient, model, layer_keys):
         
     return intermediate_relevances
 
-def get_pixel_relevance(device, img, coord, model, layer_key):
-    composite = EpsilonPlus(canonizers=[choose_canonizer(model)])
-    
-    img.requires_grad = True
-    img.grad = None
-
-    with composite.context(model) as modified_model:
-        # TODO - does this have to have both a forward *and* backward pass every time?
-        intermediate_fms, _ = get_intermediate_feature_maps_and_embedding(img, modified_model, [layer_key])
-        intermediate_fm = intermediate_fms[layer_key]
-
-        gradient = torch.zeros(intermediate_fm.shape)
-        gradient[:, :, coord[1], coord[0]] = intermediate_fm[:, :, coord[1], coord[0]]
-
-        intermediate_fm.backward(gradient=gradient.to(device))
-
-    return img.grad.squeeze().sum(dim=0).abs().detach().cpu().numpy()
-
 def get_pixel_relevances(device, img, coords, model, layer_key):
     composite = EpsilonPlus(canonizers=[choose_canonizer(model)])
     
@@ -156,7 +137,6 @@ def get_pixel_relevances(device, img, coords, model, layer_key):
             grads.append(img.grad.squeeze().sum(dim=0).abs().detach().cpu().numpy())
             img.grad=None
 
-    #return img.grad.squeeze().sum(dim=0).abs().detach().cpu().numpy()
     return grads
 
 def display_image_with_heatmap(img, heatmap, min = None, max = None):
@@ -199,7 +179,6 @@ def draw_color_maps(value_set_0, value_set_1, img_shape):
 
     assert len(value_set_0) == len(value_set_1), "value sets for color maps should have the same lengths"
 
-    #output_img = np.zeros((value_set_0[0].shape[0], value_set_0[0].shape[1] + value_set_1[0].shape[1], 3))
     output_img = np.zeros(img_shape)
     if len(value_set_0) == 0:
         return output_img.astype(np.uint8)
@@ -219,9 +198,6 @@ def draw_color_maps(value_set_0, value_set_1, img_shape):
 def draw_matches_and_color_maps(img_np_0, img_np_1, matches,
                                 intermediate_relevance_0, intermediate_relevance_1,
                                 pixel_relevances_0, pixel_relevances_1):
-    #img_np_0 = to_displayable_np(img_0)
-    #img_np_1 = to_displayable_np(img_1)
-
     img_hm_0 = display_image_with_heatmap(img_np_0, intermediate_relevance_0)
     img_hm_1 = display_image_with_heatmap(img_np_1, intermediate_relevance_1)
 
@@ -229,18 +205,6 @@ def draw_matches_and_color_maps(img_np_0, img_np_1, matches,
     color_map_img = draw_color_maps(pixel_relevances_0, pixel_relevances_1, matches_img.shape)
 
     return cv2.vconcat((matches_img, color_map_img))
-
-def calculate_residuals(H, src_pts, dst_pts):
-    src_pts = src_pts.reshape(-1, 2)
-    dst_pts = dst_pts.reshape(-1, 2)
-    
-    src_pts_h = np.hstack([src_pts, np.ones((src_pts.shape[0], 1))])
-    projected_pts_h = np.dot(H, src_pts_h.T).T
-    projected_pts = projected_pts_h[:, :2] / projected_pts_h[:, 2, np.newaxis]
-    
-    residuals = np.linalg.norm(projected_pts - dst_pts, axis=1)
-
-    return np.mean(residuals)
 
 def pairx(device, img_0, img_1, model, layer_keys, k_lines, k_colors):
     feature_maps_0, emb_0 = get_intermediate_feature_maps_and_embedding(img_0, model, layer_keys)
