@@ -283,7 +283,6 @@ def explain(img_0, img_1, img_np_0, img_np_1, model, layer_keys, k_lines=20, k_c
                                     pixel_relevances_0, pixel_relevances_1))
 
     if len(layer_keys) == 1:
-        print(type(output_images[0]))
         return output_images[0]
     
     return output_images

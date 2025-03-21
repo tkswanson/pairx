@@ -101,3 +101,22 @@ def get_img_pair_from_paths(device, img_path_0, img_path_1, img_size, img_transf
             get_img_pair_from_path(img_path_1, transform=True),
             get_img_pair_from_path(img_path_0, transform=False),
             get_img_pair_from_path(img_path_1, transform=False),)
+
+def get_pretransform_img(img_path, img_size, bbox=None):
+    with open(img_path, "rb") as f:
+        img = ImageOps.exif_transpose(Image.open(f))
+        img.load()
+
+    if bbox:
+        x, y, w, h = bbox
+        if w <= 1:
+            x = x * img.width
+            y = y * img.height
+            w = w * img.width
+            h = h * img.height
+            
+        img = img.crop((x, y, min(x + w, img.width), min(y + h, img.height)))
+    
+    img = transforms.Resize(img_size)(img)
+
+    return np.array(img)
