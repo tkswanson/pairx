@@ -107,13 +107,15 @@ def get_pretransform_img(img_path, img_size, bbox=None):
         img = ImageOps.exif_transpose(Image.open(f))
         img.load()
 
-    if bbox:
+    if bbox is not None:
         x, y, w, h = bbox
         if w <= 1:
             x = x * img.width
             y = y * img.height
             w = w * img.width
             h = h * img.height
+
+        x, y, w, h = (int(val) for val in (x, y, w, h))
             
         img = img.crop((x, y, min(x + w, img.width), min(y + h, img.height)))
     

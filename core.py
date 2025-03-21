@@ -8,6 +8,10 @@ import timm
 import torchvision
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 from xai_canonizers.efficientnet import EfficientNetBNCanonizer
 from xai_canonizers.resnet_timm import ResNetCanonizerTimm
