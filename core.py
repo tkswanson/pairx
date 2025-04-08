@@ -201,12 +201,17 @@ def draw_color_maps(value_set_0, value_set_1, img_shape):
 
 def draw_matches_and_color_maps(img_np_0, img_np_1, matches,
                                 intermediate_relevance_0, intermediate_relevance_1,
-                                pixel_relevances_0, pixel_relevances_1):
+                                pixel_relevances_0, pixel_relevances_1, background_opacity=0.2):
     img_hm_0 = display_image_with_heatmap(img_np_0, intermediate_relevance_0)
     img_hm_1 = display_image_with_heatmap(img_np_1, intermediate_relevance_1)
 
     matches_img = draw_matches(img_hm_0, img_hm_1, matches)
     color_map_img = draw_color_maps(pixel_relevances_0, pixel_relevances_1, matches_img.shape)
+
+    if background_opacity > 0:
+        raw_img = cv2.hconcat((img_np_0, img_np_1))
+        color_map_img = 255 - ((255 - color_map_img) + (255 - raw_img) * background_opacity)
+        color_map_img = np.clip(color_map_img, 0, 255).astype(np.uint8)
 
     return cv2.vconcat((matches_img, color_map_img))
 
@@ -252,7 +257,7 @@ def pairx(device, img_0, img_1, model, layer_keys, k_lines, k_colors):
         
     return results
 
-def explain(img_0, img_1, img_np_0, img_np_1, model, layer_keys, k_lines=20, k_colors=10):
+def explain(img_0, img_1, img_np_0, img_np_1, model, layer_keys, k_lines=20, k_colors=10, background_opacity=0.2):
     """
     Generates a PAIR-X explanation for the provided images and model.
 
@@ -284,7 +289,7 @@ def explain(img_0, img_1, img_np_0, img_np_1, model, layer_keys, k_lines=20, k_c
 
         output_images.append(draw_matches_and_color_maps(img_np_0, img_np_1, matches[:k_lines],
                                     intermediate_relevance_0, intermediate_relevance_1,
-                                    pixel_relevances_0, pixel_relevances_1))
+                                    pixel_relevances_0, pixel_relevances_1, background_opacity=background_opacity))
 
     if len(layer_keys) == 1:
         return output_images[0]
