@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import cv2
 import torch.nn.functional as F
 from zennit.composites import EpsilonPlus
-from xai_canonizers.efficientnet import EfficientNetBNCanonizer
+from pairx.xai_canonizers.efficientnet import EfficientNetBNCanonizer
 import torchvision.transforms as transforms
 from zennit.torchvision import ResNetCanonizer
 #from custom_canonizers import ResNetCanonizerTimm
