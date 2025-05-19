@@ -84,20 +84,34 @@ class XAIDataset:
 
         return img_0, img_1, img_np_0, img_np_1
 
-def get_img_pair_from_paths(device, img_path_0, img_path_1, img_size, img_transform):
-    def get_img_pair_from_path(img_path, transform):
-        with open(img_path, "rb") as f:
-            img = ImageOps.exif_transpose(Image.open(f))
-            img.load()
+def get_img_pair_from_paths(device, img0, img1, img_size, img_transform):
 
-            img = transforms.Resize(img_size)(img)
+    def get_img_pair_from_path(roi, transform):
+        with open(roi['filepath'], "rb") as f:
+            image = ImageOps.exif_transpose(Image.open(f))
+            image.load()
+            image = crop(roi, image)
+
+            image = transforms.Resize(img_size)(image)
 
             if transform:
-                return img_transform(img).unsqueeze(0).to(device)
+                return img_transform(image).unsqueeze(0).to(device)
 
-            return np.array(img)
+            return np.array(image)
+        
+    def crop(roi, img):
+        x, y, w, h = roi["bbox_x"], roi["bbox_y"], roi["bbox_w"], roi["bbox_h"]
+        if w <= 1:
+            x = x * img.width
+            y = y * img.height
+            w = w * img.width
+            h = h * img.height
+                
+            img = img.crop((x, y, min(x + w, img.width), min(y + h, img.height)))
+
+        return img
     
-    return (get_img_pair_from_path(img_path_0, transform=True),
-            get_img_pair_from_path(img_path_1, transform=True),
-            get_img_pair_from_path(img_path_0, transform=False),
-            get_img_pair_from_path(img_path_1, transform=False),)
+    return (get_img_pair_from_path(img0, transform=True),
+            get_img_pair_from_path(img1, transform=True),
+            get_img_pair_from_path(img0, transform=False),
+            get_img_pair_from_path(img1, transform=False),)
